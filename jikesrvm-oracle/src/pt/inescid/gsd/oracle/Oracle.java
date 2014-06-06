@@ -74,14 +74,23 @@ public class Oracle implements IOracle {
         for (int i = 0; i < pcs.length; i++) {
             instance.setValue(i, pcs[i]);
         }
-        // double[] distribution = classifier.distributionForInstance(instance);
-        double result = classifier.classifyInstance(instance);
+        double classIndex = classifier.classifyInstance(instance);
 
-        System.out.println("result: " + instance.classAttribute().value((int) result));
+        String classStr = instance.classAttribute().value((int) classIndex);
+        System.out.println("result: " + classStr);
 
-        return null;
+        log.debug("Class '" + classStr +"' predicted for pcs " + pcsToStr(pcs));
+        
+        return Matrix.values()[(int) classIndex];
     }
 
+    private String pcsToStr(double[] pcs) {
+        StringBuilder sb = new StringBuilder();
+        for(double pc : pcs)
+            sb.append("," + pc);
+        return "{" + sb.toString().substring(1) + "}";
+    }
+    
     // for testing purposes
     public static void main(String[] args) {
         try {
