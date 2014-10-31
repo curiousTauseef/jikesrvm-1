@@ -68,6 +68,13 @@ public class Stats {
   }
 
   /**
+   * JS: read option for all counters
+   */
+  public static Counter[] getCounters() {
+	  return counter;
+  }
+  
+  /**
    * Add a new counter to the set of managed counters.
    *
    * @param ctr The counter to be added.

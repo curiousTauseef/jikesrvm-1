@@ -58,4 +58,9 @@ public abstract class Statistics {
    * Read a performance event value
    */
   public abstract void perfEventRead(int counter, long[] values);
+  
+  /**
+   * JS: get the number of performance events used
+   */
+  public abstract int getNumberOfEvents();
 }

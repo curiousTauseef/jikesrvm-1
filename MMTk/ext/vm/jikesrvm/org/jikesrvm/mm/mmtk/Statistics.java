@@ -81,13 +81,21 @@ public final class Statistics extends org.mmtk.vm.Statistics implements Constant
     }
     sysCall.sysPerfEventEnable();
   }
-
+  
   /**
    * Read a performance event
    */
   @Override
   public void perfEventRead(int id, long[] values) {
     sysCall.sysPerfEventRead(id, values);
+  }
+  
+  /**
+   * JS: method to know the number of events registered 
+   */
+  @Override
+  public int getNumberOfEvents() {
+	  return perfEvents.length;
   }
 }
 

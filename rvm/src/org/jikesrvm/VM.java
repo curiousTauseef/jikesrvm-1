@@ -12,6 +12,9 @@
  */
 package org.jikesrvm;
 
+import gsd.jikesrvm.hdwcounters.PfmCountersWatchDog;
+import gsd.jikesrvm.hdwcounters.PfmCountersWatchDogSocket;
+
 import org.jikesrvm.ArchitectureSpecific.ThreadLocalState;
 import org.jikesrvm.adaptive.controller.Controller;
 import org.jikesrvm.adaptive.util.CompilerAdvice;
@@ -37,6 +40,7 @@ import org.jikesrvm.runtime.RuntimeEntrypoints;
 import org.jikesrvm.runtime.SysCall;
 
 import static org.jikesrvm.runtime.SysCall.sysCall;
+
 import org.jikesrvm.scheduler.Lock;
 import org.jikesrvm.scheduler.MainThread;
 import org.jikesrvm.scheduler.Synchronization;
@@ -400,7 +404,7 @@ public class VM extends Properties implements Constants, ExitStatus {
     // By this we mean that we can execute arbitrary Java code.  //
     ///////////////////////////////////////////////////////////////
     if (verboseBoot >= 1) VM.sysWriteln("VM is now fully booted");
-
+    
     // Inform interested subsystems that VM is fully booted.
     VM.fullyBooted = true;
     MemoryManager.fullyBootedVM();
@@ -490,6 +494,14 @@ public class VM extends Properties implements Constants, ExitStatus {
       SysCall.sysCall.sysEnableAlignmentChecking();
     }
 
+    /** JS: performance counter thread watch dog */
+    // to file
+    //PfmCountersWatchDog.boot();
+    
+    // to local monitor
+    PfmCountersWatchDogSocket.boot();
+    /** end */
+    
     // Schedule "main" thread for execution.
     if (verboseBoot >= 2) VM.sysWriteln("Creating main thread");
     // Create main thread.
@@ -2368,7 +2380,7 @@ public class VM extends Properties implements Constants, ExitStatus {
   @NoInline
   @UninterruptibleNoWarn("We're never returning to the caller, so even though this code is preemptible it is safe to call from any context")
   public static void sysExit(int value) {
-    handlePossibleRecursiveCallToSysExit();
+	handlePossibleRecursiveCallToSysExit();
 
     if (VM.countThreadTransitions) {
       RVMThread.reportThreadTransitionCounts();

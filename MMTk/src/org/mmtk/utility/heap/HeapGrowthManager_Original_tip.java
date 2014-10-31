@@ -12,13 +12,12 @@
  */
 package org.mmtk.utility.heap;
 
-import java.io.FileInputStream;
-import java.util.Properties;
-
 import org.mmtk.plan.Plan;
 import org.mmtk.utility.*;
 import org.mmtk.utility.options.Options;
+
 import org.mmtk.vm.VM;
+
 import org.vmmagic.pragma.*;
 import org.vmmagic.unboxed.*;
 
@@ -26,7 +25,7 @@ import org.vmmagic.unboxed.*;
  * This class is responsible for growing and shrinking the
  * heap size by observing heap utilization and GC load.
  */
-@Uninterruptible public abstract class HeapGrowthManager implements Constants {
+@Uninterruptible public abstract class HeapGrowthManager_Original_tip implements Constants {
 
   /**
    * The initial heap size (-Xms) in bytes
@@ -61,47 +60,7 @@ import org.vmmagic.unboxed.*;
       { 0.30, 1.00, 1.00, 1.20, 1.25, 1.35, 1.30 },
       { 0.50, 1.00, 1.00, 1.25, 1.30, 1.50, 1.50 },
       { 1.00, 1.00, 1.00, 1.25, 1.30, 1.50, 1.50 } };
-	  
-  private static final double[][] m1 = {{0.00, 0.00, 0.10, 0.30, 0.60, 0.80, 1.00},
-	{0, 0.55,	0.55,	0.60,	1.00,	1.00,	1.00},
-	{0.01, 0.55,	0.55,	0.60,	1.00,	1.00,	1.00},
-	{0.02, 0.60,	0.60,	0.65,	1.00,	1.00,	1.00},
-	{0.07, 0.65,	0.65,	0.70,	1.15,	1.20,	1.20},
-	{0.15, 1.00,	1.00,	1.00,	1.25,	1.35,	1.30},
-	{0.4, 1.00,	1.00,	1.00,	1.30,	1.50,	1.50},
-	{1, 1.00,	1.00,	1.00,	1.30,	1.50,	1.50} };
-	
-  private static final double[][] m2 = {{0.00, 0.00, 0.10, 0.30, 0.60, 0.80, 1.00},
-	{0,	0.55,	0.60,	1.00,	1.00,	1.00, 1},
-	{0.01,	0.55,	0.60,	1.00,	1.00,	1.00, 1},
-	{0.02,	0.60,	0.65,	1.00,	1.00,	1.00, 1},
-	{0.07,	0.65,	0.70,	1.00,	1.00,	1.00, 1},
-	{1.15,	1.00,	1.00,	1.05,	1.05,	1.05, 1.05},
-	{0.4,	1.00,	1.00,	1.05,	1.10,	1.10, 1.1},
-	{1,	1.00,	1.00,	1.05,	1.10,	1.10, 1.1}};
-	
-	
-  private static final double[][] m3 = {{0.00, 0.00, 0.10, 0.30, 0.60, 0.80, 1.00},
-	{0,	0.90,	0.90,	0.95,	1.00,	1.00,	1.00},
-	{0.01,	0.90,	0.90,	0.95,	1.00,	1.00,	1.00},
-	{0.02,	0.95,	0.95,	1.00,	1.00,	1.00,	1.00},
-	{0.07,	1.00,	1.00,	1.00,	1.00,	1.00,	1.00},
-	{0.15,	1.00,	1.00,	1.00,	1.05,	1.05,	1.05},
-	{0.4,	1.00,	1.00,	1.00,	1.05,	1.10,	1.10},
-	{1,	1.00,	1.00,	1.00,	1.05,	1.10,	1.10}};
-	
 
-  private static final double[][] neutral = {{0.00, 0.00, 0.10, 0.30, 0.60, 0.80, 1.00},
-	{0,	1,	1,	1,	1.00,	1.00,	1.00},
-	{0.01,	1,	1,	1,	1.00,	1.00,	1.00},
-	{0.02,	1,	1,	1.00,	1.00,	1.00,	1.00},
-	{0.07,	1.00,	1.00,	1.00,	1.00,	1.00,	1.00},
-	{0.15,	1.00,	1.00,	1.00,	1.0,	1,	1.0},
-	{0.4,	1.00,	1.00,	1.00,	1.0,	1,	1},
-	{1,	1.00,	1.00,	1.00,	1.0,	1.00,	1}};
-
-
-  
   /**
    * An encoding of the function used to manage heap size.
    * The xaxis represents the live ratio at the end of a major collection.
@@ -120,14 +79,11 @@ import org.vmmagic.unboxed.*;
    *      greater than the liveRatio for that column.</li>
    * </ul>
    */
-  private static /*final*/ double[][] function = m1; 
-    //VM.activePlan.constraints().generational() ? generationalFunction : nongenerationalFunction;
+  private static final double[][] function =
+    VM.activePlan.constraints().generational() ? generationalFunction : nongenerationalFunction;
 
   private static long endLastMajorGC;
   private static double accumulatedGCTime;
-  
-  // JS
-  public static int matrix=0;
 
   /**
    * Initialize heap size parameters and the mechanisms
@@ -142,7 +98,6 @@ import org.vmmagic.unboxed.*;
     VM.events.heapSizeChanged(currentHeapSize);
     if (VM.VERIFY_ASSERTIONS) sanityCheck();
     endLastMajorGC = VM.statistics.nanoTime();
-
   }
 
   /**
@@ -201,14 +156,14 @@ import org.vmmagic.unboxed.*;
   /**
    * Decide how to grow/shrink the heap to respond
    * to application's memory usage.
-   * @return true if heap size was changed, false otherwise
+   * @return {@code true} if heap size was changed, {@code false} otherwise
    */
   public static boolean considerHeapSize() {
     Extent oldSize = currentHeapSize;
     Extent reserved = Plan.reservedMemory();
     double liveRatio = reserved.toLong() / ((double) currentHeapSize.toLong());
     double ratio = computeHeapChangeRatio(liveRatio);
-    Extent newSize = Word.fromIntSignExtend((int)(ratio * (double) (oldSize.toLong()>>LOG_BYTES_IN_MBYTE))).lsh(LOG_BYTES_IN_MBYTE).toExtent(); // do arith in MB to avoid overflow
+    Extent newSize = Word.fromIntSignExtend((int)(ratio * (oldSize.toLong()>>LOG_BYTES_IN_MBYTE))).lsh(LOG_BYTES_IN_MBYTE).toExtent(); // do arith in MB to avoid overflow
     if (newSize.LT(reserved)) newSize = reserved;
     newSize = newSize.plus(BYTES_IN_MBYTE - 1).toWord().rshl(LOG_BYTES_IN_MBYTE).lsh(LOG_BYTES_IN_MBYTE).toExtent(); // round to next megabyte
     if (newSize.GT(maxHeapSize)) newSize = maxHeapSize;
@@ -216,11 +171,6 @@ import org.vmmagic.unboxed.*;
       // Heap size is going to change
       currentHeapSize = newSize;
       if (Options.verbose.getValue() >= 2) {
-		// JS
-		Log.write("ratio = "); Log.write(ratio); Log.writeln("");
-		if (newSize.LT(oldSize))
-			Log.write("heap size reduced");
-		// ----
         Log.write("GC Message: Heap changed from "); Log.writeDec(oldSize.toWord().rshl(LOG_BYTES_IN_KBYTE));
         Log.write("KB to "); Log.writeDec(newSize.toWord().rshl(LOG_BYTES_IN_KBYTE));
         Log.writeln("KB");
@@ -231,151 +181,7 @@ import org.vmmagic.unboxed.*;
       return false;
     }
   }
-  
-  // JS - method used at VM boot time to set the generational growth rate matrix
-  public static void setGenerationGrowthRate(double[][] newGrowthRatio) {
-	  function = newGrowthRatio;
-	  sanityCheck();
-  }
-  
-  // JS - method used at VM boot time to set the generational growth rate matrix
-  public static void setGenerationGrowthRate() {
-	String value = System.getenv("gcmatrix"); //generationalFunction
-	if (value != null) {
-		switch(value.charAt(0)) {
-			case '0': function = generationalFunction; break;
-			case '1': function = m1; break;
-			case '2': function = m2; break;
-			case '3': function = m3; break;
-			default:
-		}
-		Log.write(value); Log.writeln("");
-	} else {
-		Log.writeln("using default gc matrix");
-	}
-  }
 
-  private static double computeHeapChangeRatio(double liveRatio) {
-	// hack
-	function = generationalFunction;
-	  
-	// (1) compute GC load.
-    long totalNanos = VM.statistics.nanoTime() - endLastMajorGC;
-	double totalTime = VM.statistics.nanosToMillis(totalNanos);
-	double gcLoad = accumulatedGCTime / totalTime;
-	/*
-	Properties p = new Properties();
-	try {
-		p.load(new FileInputStream("gcmatrix.conf"));
-	} catch (Exception ex) {
-		Log.writeln(ex.getMessage());
-		System.exit(-1);
-	}
-	String value = (String) p.get("gcmatrix");
-	Log.writeln("Reading gcmatrix = " + value);
-	*/
-	/*if (value != null) {
-		char firstChar = value.charAt(0); 
-		switch(firstChar) {
-			case '0': function = generationalFunction; break;
-			case '1': function = m1; break;
-			case '2': function = m2; break;
-			case '3': function = m3; break;
-			//case 10: function = neutral; break;
-			default: Log.writeln("using default gc matrix");
-		}
-		Log.write("Using matrix " + firstChar);
-	}
-    */
-	
-	if (liveRatio > 1) {
-		// Perhaps indicates bad bookkeeping in MMTk?
-		Log.write("GCWarning: Live ratio greater than 1: ");
-		Log.writeln(liveRatio);
-		liveRatio = 1;
-	}
-	if (gcLoad > 1) {
-		if (gcLoad > 1.0001) {
-			Log.write("GC Error: GC load was greater than 1!! ");
-			Log.writeln(gcLoad);
-			Log.write("GC Error:\ttotal time (ms) "); Log.writeln(totalTime);
-			Log.write("GC Error:\tgc time (ms) "); Log.writeln(accumulatedGCTime);
-		}
-		gcLoad = 1;
-   }
-         if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(liveRatio >= 0);
-         if (VM.VERIFY_ASSERTIONS && gcLoad < -0.0) {
-           Log.write("gcLoad computed to be "); Log.writeln(gcLoad);
-           Log.write("\taccumulateGCTime was (ms) "); Log.writeln(accumulatedGCTime);
-           Log.write("\ttotalTime was (ms) "); Log.writeln(totalTime);
-           if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
-         }
-    
-         if (Options.verbose.getValue() > 2) {
-           Log.write("Live ratio "); Log.writeln(liveRatio);
-           Log.write("GCLoad     "); Log.writeln(gcLoad);
-         }
-     
-         // (2) Find the 4 points surrounding gcLoad and liveRatio
-         int liveRatioUnder = 1;
-         int liveRatioAbove = function[0].length - 1;
-         int gcLoadUnder = 1;
-         int gcLoadAbove = function.length - 1;
-         if (liveRatio >= 1.0) {
-           // liveRatio has maxed out
-           liveRatioUnder = liveRatioAbove;
-         } else {
-           while (true) {
-             if (function[0][liveRatioUnder+1] > liveRatio) break;
-             liveRatioUnder++;
-           }
-           while (true) {
-             if (function[0][liveRatioAbove-1] <= liveRatio) break;
-             liveRatioAbove--;
-           }
-         }
-         if (gcLoad >= 1.0) {
-           // gcRatio has maxed out
-           gcLoadUnder = gcLoadAbove;
-         } else {
-           while (true) {
-             if (function[gcLoadUnder+1][0] > gcLoad) break;
-             gcLoadUnder++;
-           }
-           while (true) {
-             if (function[gcLoadAbove-1][0] <= gcLoad) break;
-             gcLoadAbove--;
-           }
-         }
-     
-         // (3) Compute the heap change ratio
-         double factor = function[gcLoadUnder][liveRatioUnder];
-         if (liveRatioUnder != liveRatioAbove) {
-           // interpolate for liveRatio values in between two specified values in function table
-           double liveRatioFraction =
-             (liveRatio - function[0][liveRatioUnder]) /
-             (function[0][liveRatioAbove] - function[0][liveRatioUnder]);
-           double liveRatioDelta =
-             function[gcLoadUnder][liveRatioAbove] - function[gcLoadUnder][liveRatioUnder];
-           factor += (liveRatioFraction * liveRatioDelta);
-         }
-         if (gcLoadUnder != gcLoadAbove) {
-           // interpolate for gcLoad values in between two specified values in function table
-           double gcLoadFraction =
-             (gcLoad - function[gcLoadUnder][0]) /
-             (function[gcLoadAbove][0] - function[gcLoadUnder][0]);
-           double gcLoadDelta =
-             function[gcLoadAbove][liveRatioUnder] - function[gcLoadUnder][liveRatioUnder];
-           factor += (gcLoadFraction * gcLoadDelta);
-         }
-         if (Options.verbose.getValue() > 2) {
-           Log.write("Heap adjustment factor is ");
-           Log.writeln(factor);
-         }
-         return factor;
-    }
-  
-  /*
   private static double computeHeapChangeRatio(double liveRatio) {
     // (1) compute GC load.
     long totalNanos = VM.statistics.nanoTime() - endLastMajorGC;
@@ -409,60 +215,65 @@ import org.vmmagic.unboxed.*;
       Log.write("Live ratio "); Log.writeln(liveRatio);
       Log.write("GCLoad     "); Log.writeln(gcLoad);
     }
-	
-	switch(matrix) {
-		case 0: function = generationalFunction; break;
-		case 1: function = m1; break;
-		case 2: function = m2; break;
-		case 3: function = m3; break;
-		default:
-	}
-	
-	
+
     // (2) Find the 4 points surrounding gcLoad and liveRatio
     int liveRatioUnder = 1;
     int liveRatioAbove = function[0].length - 1;
     int gcLoadUnder = 1;
     int gcLoadAbove = function.length - 1;
-    while (true) {
-      if (function[0][liveRatioUnder+1] >= liveRatio) break;
-      liveRatioUnder++;
+    if (liveRatio >= 1.0) {
+      // liveRatio has maxed out
+      liveRatioUnder = liveRatioAbove;
+    } else {
+      while (true) {
+        if (function[0][liveRatioUnder+1] > liveRatio) break;
+        liveRatioUnder++;
+      }
+      while (true) {
+        if (function[0][liveRatioAbove-1] <= liveRatio) break;
+        liveRatioAbove--;
+      }
     }
-    while (true) {
-      if (function[0][liveRatioAbove-1] <= liveRatio) break;
-      liveRatioAbove--;
-    }
-    while (true) {
-      if (function[gcLoadUnder+1][0] >= gcLoad) break;
-      gcLoadUnder++;
-    }
-    while (true) {
-      if (function[gcLoadAbove-1][0] <= gcLoad) break;
-      gcLoadAbove--;
+    if (gcLoad >= 1.0) {
+      // gcRatio has maxed out
+      gcLoadUnder = gcLoadAbove;
+    } else {
+      while (true) {
+        if (function[gcLoadUnder+1][0] > gcLoad) break;
+        gcLoadUnder++;
+      }
+      while (true) {
+        if (function[gcLoadAbove-1][0] <= gcLoad) break;
+        gcLoadAbove--;
+      }
     }
 
     // (3) Compute the heap change ratio
     double factor = function[gcLoadUnder][liveRatioUnder];
-    double liveRatioFraction =
-      (liveRatio - function[0][liveRatioUnder]) /
-      (function[0][liveRatioAbove] - function[0][liveRatioUnder]);
-    double liveRatioDelta =
-      function[gcLoadUnder][liveRatioAbove] - function[gcLoadUnder][liveRatioUnder];
-    factor += (liveRatioFraction * liveRatioDelta);
-    double gcLoadFraction =
-      (gcLoad - function[gcLoadUnder][0]) /
-      (function[gcLoadAbove][0] - function[gcLoadUnder][0]);
-    double gcLoadDelta =
-      function[gcLoadAbove][liveRatioUnder] - function[gcLoadUnder][liveRatioUnder];
-    factor += (gcLoadFraction * gcLoadDelta);
-
+    if (liveRatioUnder != liveRatioAbove) {
+      // interpolate for liveRatio values in between two specified values in function table
+      double liveRatioFraction =
+        (liveRatio - function[0][liveRatioUnder]) /
+        (function[0][liveRatioAbove] - function[0][liveRatioUnder]);
+      double liveRatioDelta =
+        function[gcLoadUnder][liveRatioAbove] - function[gcLoadUnder][liveRatioUnder];
+      factor += (liveRatioFraction * liveRatioDelta);
+    }
+    if (gcLoadUnder != gcLoadAbove) {
+      // interpolate for gcLoad values in between two specified values in function table
+      double gcLoadFraction =
+        (gcLoad - function[gcLoadUnder][0]) /
+        (function[gcLoadAbove][0] - function[gcLoadUnder][0]);
+      double gcLoadDelta =
+        function[gcLoadAbove][liveRatioUnder] - function[gcLoadUnder][liveRatioUnder];
+      factor += (gcLoadFraction * gcLoadDelta);
+    }
     if (Options.verbose.getValue() > 2) {
       Log.write("Heap adjustment factor is ");
       Log.writeln(factor);
     }
     return factor;
   }
-  */
 
   /**
    * Check that function satisfies the invariants
@@ -492,6 +303,4 @@ import org.vmmagic.unboxed.*;
       if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(function[i-1].length == function[i].length);
     }
   }
-
-
 }

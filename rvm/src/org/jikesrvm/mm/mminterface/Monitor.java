@@ -12,8 +12,11 @@
  */
 package org.jikesrvm.mm.mminterface;
 
+import gsd.jikesrvm.hdwcounters.PfmCountersWatchDog;
+
 import org.jikesrvm.Callbacks;
 import org.mmtk.utility.Constants;
+import org.mmtk.utility.Log;
 
 /**
  * This class allows JMTk to register call backs with Callbacks.

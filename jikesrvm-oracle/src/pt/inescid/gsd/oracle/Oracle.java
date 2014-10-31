@@ -2,7 +2,13 @@ package pt.inescid.gsd.oracle;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.Properties;
+import java.util.Scanner;
 
 import org.apache.log4j.Logger;
 
@@ -33,6 +39,8 @@ public class Oracle implements IOracle {
 
     private Instances trainingInstances;
 
+    private Instance instance;
+    
     public Oracle() {
         Properties properties = new Properties();
         try {
@@ -52,7 +60,13 @@ public class Oracle implements IOracle {
         System.out.println("trainingSet: " + trainingSet);
         trainingInstances = source.getDataSet();
         trainingInstances.setClassIndex(trainingInstances.numAttributes() - 1);
+        // show training instances
+        System.out.println(trainingInstances);
 
+        // init Attribute to be feed with values
+        instance = new Instance(ATTRIBUTES.length);
+        instance.setDataset(trainingInstances);
+        
         // TODO implement factory class to choose classifier at runtime
         SMO baseClassifier = new SMO();
         // baseClassifier.setC(Math.pow(2, 15)); // consider the adjustment of
@@ -66,21 +80,16 @@ public class Oracle implements IOracle {
     @Override
     public Matrix predict(double[] pcs) throws Exception {
 
-        Instance instance = new Instance(ATTRIBUTES.length);
-        instance.setDataset(trainingInstances);
-        for (int i = 0; i < pcs.length; i++)
-            instance.setValue(i, pcs[i]);
-
         for (int i = 0; i < pcs.length; i++) {
             instance.setValue(i, pcs[i]);
         }
         double classIndex = classifier.classifyInstance(instance);
 
+        /*
         String classStr = instance.classAttribute().value((int) classIndex);
         System.out.println("result: " + classStr);
-
         log.debug("Class '" + classStr +"' predicted for pcs " + pcsToStr(pcs));
-        
+        */
         return Matrix.values()[(int) classIndex];
     }
 
@@ -98,10 +107,30 @@ public class Oracle implements IOracle {
 
             oracle.init();
 
+            ServerSocket socket = new ServerSocket();
+            socket.bind(new InetSocketAddress(InetAddress.getLocalHost(), 5005));
+            System.out.println("Listening at " + socket.getLocalSocketAddress());
+            Socket client = socket.accept();
+            Scanner input = new Scanner(client.getInputStream());
+            double[] pcs = new double[ATTRIBUTES.length];
+            int i=0;
+            while (true) {
+            	//System.out.println("Reading values...");
+        		String value = input.next();
+        		//System.out.println("value = " + value);
+        		if (value.equals("*")) {
+        			i=0;
+                	System.out.println("Calling oracle...");
+                	System.out.println("Oracle says " + oracle.predict(pcs));
+        			continue;
+        		}
+        		pcs[i++] = Double.parseDouble(value);
+            }
+            /*
             double[] pcs = new double[] { 112709888, 6203905, 1022179323, 1042568017, 522040499, 598977, 12401291, 0,
                     13, 3672798, 1273605903, 70 }; // should be classified as M3
             oracle.predict(pcs);
-
+            */
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -12,6 +12,8 @@
  */
 package org.jikesrvm.scheduler;
 
+import gsd.jikesrvm.hdwcounters.PfmCountersWatchDog;
+
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
@@ -1358,6 +1360,7 @@ public final class RVMThread extends ThreadContext implements Constants {
 
     FinalizerThread.boot();
     getCurrentThread().enableYieldpoints();
+
     if (traceAcct) VM.sysWriteln("RVMThread booted");
   }
 

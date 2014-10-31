@@ -3,9 +3,9 @@ package gsd.jikesrvm.hdwcounters;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.StringWriter;
-import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.net.*;
 
 import org.jikesrvm.Callbacks;
 import org.jikesrvm.Callbacks.ExitMonitor;
@@ -19,7 +19,7 @@ import org.vmmagic.pragma.NonMoving;
 import static org.jikesrvm.runtime.SysCall.sysCall;
 
 @NonMoving
-public class PfmCountersWatchDog  extends Thread implements ExitMonitor {
+public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 	/** {@code true} if the counter did not run due to contention for a physical counter */
 	private boolean contended;
 
@@ -38,15 +38,17 @@ public class PfmCountersWatchDog  extends Thread implements ExitMonitor {
 	private static final int TIME_ENABLED = 1;
 	private static final int TIME_RUNNING = 2;
 	//private static final long MIN_INTERVAL = 500;
+	private static final int SERVER_PORT = 5005;
 	
 	/** {@code true} if any data was scaled */
 	public static boolean dataWasScaled = false;
 
 	/** interval = number of miliseconds between reads */
 	private long interval;
+	
+	/* Socket connection to Local monitor */
+	Socket socket;
 
-	/**	array of counter's values for the watchdog */
-	private BufferedWriter counters[];
 	/**	array of counter's names for the watchdog */
 	private String perfEventNames[];
 	/** max values */
@@ -54,23 +56,29 @@ public class PfmCountersWatchDog  extends Thread implements ExitMonitor {
 	
 	public static boolean enabled;
 
-	protected PfmCountersWatchDog(String name, long interval, String eventsNames, String prefix) {
+	protected PfmCountersWatchDogSocket(String name, long interval, String eventsNames, String prefix) {
 		super(name);
+		
+		// create socket to local monitor
+		socket = new Socket();
+		try {
+			InetSocketAddress localserver = new InetSocketAddress(InetAddress.getLocalHost(), SERVER_PORT);
+			Log.writeln("[perf-mon-watch-dog] tying to connect to " + localserver);
+			socket.connect(localserver);
+		} catch (IOException e) {
+			Log.writeln("[perf-mon-watch-dog] error connecting to server.");
+			Log.writeln("[perf-mon-watch-dog] watch dog disabled.");
+			return;
+		}
+		
 		//this.interval = interval<MIN_INTERVAL ? MIN_INTERVAL : interval;
 		this.interval = interval;
 		perfEventNames = eventsNames.split(",");
-		counters = new BufferedWriter[perfEventNames.length];
 		/* */
 		int n = perfEventNames.length;
 		sysCall.sysPerfEventInit(n);
 		for (int i = 0; i < n; i++) {
 			sysCall.sysPerfEventCreate(i, perfEventNames[i].concat("\0").getBytes());
-			try {
-				counters[i] = new BufferedWriter(new FileWriter(prefix+"_"+perfEventNames[i]));
-			} catch (IOException e) {
-				Log.write("Error creating file for event " + perfEventNames[i]);
-				System.exit(0);
-			}
 		}
 		sysCall.sysPerfEventEnable();
 		enabled = true;
@@ -87,7 +95,7 @@ public class PfmCountersWatchDog  extends Thread implements ExitMonitor {
 		Log.writeln("[perf-mon-watch-dog] booting");
 		boolean enabled = Boolean.parseBoolean(System.getenv("wdogenabled"));
 		if (enabled) {
-			PfmCountersWatchDog ft = new PfmCountersWatchDog(
+			PfmCountersWatchDogSocket ft = new PfmCountersWatchDogSocket(
 					"perf-mon-watch-dog",
 					100/*Long.parseLong(System.getenv("wdoginterval"))*/,
 					System.getenv("wdogevents"),
@@ -101,34 +109,37 @@ public class PfmCountersWatchDog  extends Thread implements ExitMonitor {
 	@Override
 	public void run() {
 		if (!enabled)
-			return;
-		
+			return;		
 		Log.writeln("[perf-mon-watch-dog] start");
 		Log.writeln("[perf-mon-watch-dog] reading at each " + interval + " milisencods");
-//		for (int i=0; i<counters.length; ++i) {
-//			counters[i] = getCurrentValue(i);
-//			Log.write(perfEventNames[i] + ", ");
-//		}
-		while (enabled) {
-			try {
-				for (int i=0; i<counters.length; ++i) {
-					long value = getCurrentValue(i);
-//					Log.writeln("value="+value+"\t rate="+(value-counters[i])/interval + "\t");
-//					counters[i] = value;
-					try {
-						counters[i].write(Long.toString(value));
-						counters[i].write(',');
-						counters[i].flush();
-					} catch (IOException e) {
-						Log.write("Error writing value for event " + perfEventNames[i]);
-						System.exit(0);
+		try {
+			StringBuilder sb = new StringBuilder();
+			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+			while (enabled) {
+				try {
+					for (int i=0; i<perfEventNames.length; ++i) {
+						long value = getCurrentValue(i);
+	//					Log.writeln("value="+value+"\t rate="+(value-counters[i])/interval + "\t");
+	//					counters[i] = value;
+						sb.append(value);
+						sb.append(' ');
 					}
+					sb.append("* ");
+					Log.writeln("[perf-mon-watch-dog] writing HPC values");
+					writer.write(sb.toString());
+					writer.flush();
+					
+					sb.delete(0,sb.length());
+					
+					Thread.sleep(interval);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+					System.exit(-1);
 				}
-				Thread.sleep(interval);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-				System.exit(-1);
 			}
+		} catch (IOException ex) {
+			Log.writeln("[perf-mon-watch-dog] exception... exiting.");
+			System.exit(-1);
 		}
 //		/* print header with names of counters */ 
 //		for (int i=0; i<counters.length; ++i) {
@@ -177,7 +188,7 @@ public class PfmCountersWatchDog  extends Thread implements ExitMonitor {
 	public void notifyExit(int value) {
 		// JS: hack to end watch dog
 	    Log.writeln("exiting watch dog");
-		PfmCountersWatchDog.enabled = false;
+		PfmCountersWatchDogSocket.enabled = false;
 		// end of hack
 	}
 
