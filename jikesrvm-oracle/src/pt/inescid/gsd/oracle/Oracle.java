@@ -19,7 +19,7 @@ import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.converters.ConverterUtils.DataSource;
 
-public class Oracle implements IOracle {
+public class Oracle implements IOracle extends Thread {
 
     private final static String ATTRIBUTES[] = { "BRANCH_INSTRUCTIONS_RETIRED", "CACHE-REFERENCES", "CYCLES",
             "INSTRUCTION_RETIRED", "INSTRUCTIONS", "LLC_MISSES", "LLC_REFERENCES", "MAJOR-FAULTS", "MINOR-FAULTS",
@@ -31,6 +31,8 @@ public class Oracle implements IOracle {
 
     private static final String TRAINING_SET_FILENAME = "training-set.arff";
 
+    private static final int attributesSize = ATTRIBUTES.length - 1;
+
     private Logger log = Logger.getLogger(Oracle.class);
 
     private String trainingSet;
@@ -41,7 +43,9 @@ public class Oracle implements IOracle {
 
     private Instance instance;
     
-    public Oracle() {
+    private Socket socket;
+
+    public Oracle(Socket socket) {
         Properties properties = new Properties();
         try {
             properties.load(new FileInputStream(PROPERTIES_FILE));
@@ -49,7 +53,7 @@ public class Oracle implements IOracle {
             log.info("Not possible to load properties file '" + PROPERTIES_FILE + "'.");
         }
         trainingSet = properties.getProperty(TRAINING_SET_PROP, TRAINING_SET_FILENAME);
-
+        this.socket = socket;
     }
 
     @Override
@@ -100,9 +104,48 @@ public class Oracle implements IOracle {
         return "{" + sb.toString().substring(1) + "}";
     }
     
-    // for testing purposes
-    public static void main(String[] args) {
+    public void run() {
+
         try {
+            PrintWriter out = new PrintWriter(echoSocket.getOutputStream(), true);
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+            while(true) {
+                String line = in.readLine();
+                String[] items = line.split(",");
+                
+
+                if(attributesSize != items.length) {
+                    Log.error("Number of pcs mismatch.");
+                    return;
+                }
+                double[] pcs = new double[attributesSize];
+		for(int i = 0; i < items.length; i++) {
+                    pcs[i] = Double.parseDouble(items[i]);
+                }
+
+            }
+
+        } catch(IOException e) {
+            e.printStackTrace();           
+        } finally {
+            socket.close();
+        }
+    }
+
+    public static void main(String[] args) {
+
+        int port = 9898;
+        Log.info(String.format("Starting server on port %d", port));
+        ServerSocket listener = new ServerSocket(port);
+        try {
+            while(true) {
+                new Oracle(listener.accept()).start(); 
+            }
+
+
+
+
             Oracle oracle = new Oracle();
 
             oracle.init();
