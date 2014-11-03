@@ -1,24 +1,36 @@
-public class MeanDiffAggregator implements Aggregator {
+package pt.inescid.gsd.oracle.aggregators;
+
+public class MeanDiffAggregator extends Aggregator {
 
     private double[] previousItems;
 
     private double[] sum;
 
-    private double[] count;
+    private int[] count;
 
+    private boolean first = true;
+
+    public MeanDiffAggregator(int numberOfItems) {
+        super(numberOfItems);
+        previousItems = new double[numberOfItems];
+        sum = new double[numberOfItems];
+        count = new int[numberOfItems];
+    }
 
     public double[] process(double[] items) {
+        double[] result = first ? null : new double[numberOfItems];
 
-
-
-      for(int i = 0; i < items.length; i++) {
-
-          sum[i] += items[i];
-          count[i]++;
-
-      }
-
-
+        for (int i = 0; i < numberOfItems; i++) {
+            if(!first) {
+                double diff = items[i] - previousItems[i];
+                sum[i] += diff;
+                count[i]++;
+                result[i] = sum[i] / (double)count[i];
+            }
+            previousItems[i] = items[i];
+        }
+        first = false;
+        return result;
     }
 
 }

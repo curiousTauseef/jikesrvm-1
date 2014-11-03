@@ -1,6 +1,12 @@
+package pt.inescid.gsd.oracle.aggregators;
 
+public abstract class Aggregator {
 
-interface Aggregator {
+    protected int numberOfItems;
 
-    double[] process(double[]);
+    public Aggregator(int numberOfItems) {
+        this.numberOfItems = numberOfItems;
+    }
+
+    public abstract double[] process(double[] items);
 }
