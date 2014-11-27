@@ -254,6 +254,17 @@ import org.vmmagic.unboxed.*;
 		Log.writeln("using default gc matrix");
 	}
   }
+  
+  public static void setGenerationGrowthRate(int matrix) {
+	switch(matrix) {
+		case 0: function = generationalFunction; break;
+		case 1: function = m1; break;
+		case 2: function = m2; break;
+		case 3: function = m3; break;
+		default:
+	}
+	Log.write(matrix); Log.writeln("");
+  }
 
   private static double computeHeapChangeRatio(double liveRatio) {
 	// hack

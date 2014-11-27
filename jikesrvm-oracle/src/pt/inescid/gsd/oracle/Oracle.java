@@ -1,6 +1,7 @@
 package pt.inescid.gsd.oracle;
 
 import org.apache.log4j.Logger;
+
 import pt.inescid.gsd.oracle.aggregators.Aggregator;
 import pt.inescid.gsd.oracle.aggregators.MeanDiffAggregator;
 import weka.classifiers.Classifier;
@@ -31,11 +32,18 @@ public class Oracle extends Thread implements IOracle {
 
     private static final int attributesSize = ATTRIBUTES.length - 1;
 
+	private static final String PORT = "port";
+
+	private static final String DEFAULT_PORT = "9898";
+
 
     private static Logger log = Logger.getLogger(Oracle.class);
 
-    private String trainingSet;
+    private static String trainingSet;
 
+    private static Properties properties;
+    
+    
     private Classifier classifier;
 
     private Instances trainingInstances;
@@ -46,14 +54,17 @@ public class Oracle extends Thread implements IOracle {
 
     private Aggregator aggregator = new MeanDiffAggregator(attributesSize);
 
-    public Oracle(Socket socket) {
-        Properties properties = new Properties();
+    static {
+        properties = new Properties();
         try {
             properties.load(new FileInputStream(PROPERTIES_FILE));
         } catch (IOException e) {
             log.warn(String.format("It was not possible to load properties file '%s'.", PROPERTIES_FILE));
         }
         trainingSet = properties.getProperty(TRAINING_SET_PROP, TRAINING_SET_FILENAME);
+    }
+    
+    public Oracle(Socket socket) {
         this.socket = socket;
     }
 
@@ -80,11 +91,11 @@ public class Oracle extends Thread implements IOracle {
         classifier = (Classifier) baseClassifier;
         classifier.buildClassifier(trainingInstances);
     }
-
+    
     @Override
-    public String predict(double[] pcs) throws Exception {
+    public OracleResult predict(double[] pcs, BufferedWriter fileWriter) throws Exception {
         if(pcs == null)
-            return null;
+            return new OracleResult(-1, null);
 
         for (int i = 0; i < pcs.length; i++) {
             instance.setValue(i, pcs[i]);
@@ -92,11 +103,22 @@ public class Oracle extends Thread implements IOracle {
         double classIndex = classifier.classifyInstance(instance);
 
         String classStr = instance.classAttribute().value((int) classIndex);
-        double confidence = classifier.distributionForInstance(instance)[(int)classIndex];
-        log.debug(String.format("Class %s predicted with a confidence of %f for pcs '%s'", classStr, confidence,
+        double[] distribution = classifier.distributionForInstance(instance);
+        double confidence = distribution[(int)classIndex];
+        log.info(String.format("Class %s predicted with a confidence of %f for pcs '%s'", classStr, confidence,
                 pcsToStr(pcs)));
 
-        return confidence >= MIN_CONFIDENCE ? classStr : null;
+        // write all distributions
+        for (int i=0; i<distribution.length; ++i) {
+        	fileWriter.write(""+distribution[i]);
+        	if (i < distribution.length-1)
+        		fileWriter.write(";");
+        }
+        fileWriter.write('\n');
+        fileWriter.flush();
+        
+		//return confidence >= MIN_CONFIDENCE ? classStr : null;
+        return new OracleResult((int)classIndex, distribution);
     }
 
     private String pcsToStr(double[] pcs) {
@@ -107,31 +129,46 @@ public class Oracle extends Thread implements IOracle {
     }
     
     public void run() {
-
+    	log.info("connected to a JVM:" + socket.getPort());
         try {
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
 
-            // FIXME training a model for each thread?
-            init();
-            while(true) {
-                String line = in.readLine();
-                if(line == null || !line.contains(","))
-                    continue;
-                log.debug(String.format("Received instance to classify: '%s'", line));
-
-                String[] items = line.split(",");
-                
-                if(attributesSize != items.length) {
-                    log.error(String.format("Number of provided pcs: %d (required: %d)", items.length, attributesSize));
-                    return;
-                }
-                double[] pcs = new double[attributesSize];
-		        for(int i = 0; i < items.length; i++) {
-                    pcs[i] = Double.parseDouble(items[i]);
-                }
-                pcs = aggregator.process(pcs);
-                out.println(predict(pcs));
+            String appName = in.readLine();
+            log.info(appName);
+            
+            BufferedWriter fileWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("LOG_" + appName + ".csv")));
+            fileWriter.write("M0;M1;M2;M3\n");
+            
+            try {
+	            // FIXME training a model for each thread?
+	            init();
+	            while(true) {
+	            	String line = in.readLine();
+	                if(line == null || !line.contains(","))
+	                    continue;
+	                log.info(String.format("Received instance to classify: '%s'", line));
+	
+	                String[] items = line.split(",");
+	                
+	                if(attributesSize != items.length) {
+	                    log.error(String.format("Number of provided pcs: %d (required: %d)", items.length, attributesSize));
+	                    return;
+	                }
+	                double[] pcs = new double[attributesSize];
+			        for(int i = 0; i < items.length; i++) {
+	                    pcs[i] = Double.parseDouble(items[i]);
+	                }
+	                pcs = aggregator.process(pcs);
+	                OracleResult result = predict(pcs, fileWriter);
+	                
+	                // write best matrix yet
+	                log.info("Sending result to JVM " + result);
+	                out.write(""+result.matrix); out.newLine(); out.flush();
+	            }
+            } catch(IOException ex) {
+            	fileWriter.close();
+            	throw ex;
             }
 
         } catch(Exception e) {
@@ -139,6 +176,7 @@ public class Oracle extends Thread implements IOracle {
         } finally {
             try {
                 socket.close();
+                log.debug("connection to JVM:" + socket.getPort() + " lost");
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -148,7 +186,7 @@ public class Oracle extends Thread implements IOracle {
     public static void main(String[] args) {
 
         try {
-            int port = 9898;
+            int port = Integer.parseInt(Oracle.properties.getProperty(PORT, DEFAULT_PORT));
             ServerSocket listener = new ServerSocket(port);
             log.info(String.format("Server running on %s:%d", listener.getInetAddress().getCanonicalHostName(),
                     listener.getLocalPort()));

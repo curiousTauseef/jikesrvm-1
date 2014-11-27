@@ -498,6 +498,16 @@ public class VM extends Properties implements Constants, ExitStatus {
     // to file
     //PfmCountersWatchDog.boot();
     
+    // JS: Add Exit notification
+    Callbacks.addExitMonitor(new Callbacks.ExitMonitor() {
+            /**
+            * Notify the monitor that the VM is about to exit.
+            */
+            public void notifyExit(int value) {
+                    VM.sysWriteln("[A2RVM] END-A2VM " + org.mmtk.utility.heap.HeapGrowthManager.getCurrentHeapSize().toLong() + " bytes");
+            }
+    });
+    
     // to local monitor
     PfmCountersWatchDogSocket.boot();
     /** end */

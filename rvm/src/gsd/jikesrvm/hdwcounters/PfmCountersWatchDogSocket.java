@@ -1,18 +1,23 @@
 package gsd.jikesrvm.hdwcounters;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.net.*;
 
 import org.jikesrvm.Callbacks;
+import org.jikesrvm.CommandLineArgs;
 import org.jikesrvm.Callbacks.ExitMonitor;
 import org.mmtk.vm.Collection;
 import org.mmtk.vm.VM;
 //import org.jikesrvm.mm.mmtk.Statistics;
+import org.mmtk.plan.ControllerCollectorContext;
 import org.mmtk.utility.Log;
+import org.mmtk.utility.heap.HeapGrowthManager;
 //import org.mmtk.utility.statistics.PerfEvent;
 import org.vmmagic.pragma.NonMoving;
 
@@ -52,17 +57,23 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 	/**	array of counter's names for the watchdog */
 	private String perfEventNames[];
 	/** max values */
-	private static int MAXVALUES = 4096; 
+	private static int MAXVALUES = 4096;
 	
 	public static boolean enabled;
 
 	protected PfmCountersWatchDogSocket(String name, long interval, String eventsNames, String prefix) {
 		super(name);
+
+		// set threshold
+		threshold = Integer.parseInt(System.getenv("THRESHOLD"));
+		
+		// read the server port from env variable 
+		int port = Integer.parseInt(System.getenv("MLPORT"));
 		
 		// create socket to local monitor
 		socket = new Socket();
 		try {
-			InetSocketAddress localserver = new InetSocketAddress(InetAddress.getLocalHost(), SERVER_PORT);
+			InetSocketAddress localserver = new InetSocketAddress(InetAddress.getLocalHost(), port);
 			Log.writeln("[perf-mon-watch-dog] tying to connect to " + localserver);
 			socket.connect(localserver);
 		} catch (IOException e) {
@@ -73,6 +84,7 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 		
 		//this.interval = interval<MIN_INTERVAL ? MIN_INTERVAL : interval;
 		this.interval = interval;
+		Log.writeln("[perf-mon-watch-dog] initiating events " + eventsNames);
 		perfEventNames = eventsNames.split(",");
 		/* */
 		int n = perfEventNames.length;
@@ -106,6 +118,9 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 		}
 	}
 
+	private int previousMatrix;
+	private int threshold;
+	
 	@Override
 	public void run() {
 		if (!enabled)
@@ -115,21 +130,45 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 		try {
 			StringBuilder sb = new StringBuilder();
 			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+			BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			
+			// write applications name
+			String appname = System.getenv("appname");
+			Log.writeln("[perf-mon-watch-dog] app name is " + appname);
+			writer.write(appname+"\n");
+			
+			int previousMatrix = 0, countDiffDecisions=0;
+			
+			//BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			while (enabled) {
 				try {
 					for (int i=0; i<perfEventNames.length; ++i) {
 						long value = getCurrentValue(i);
-	//					Log.writeln("value="+value+"\t rate="+(value-counters[i])/interval + "\t");
-	//					counters[i] = value;
 						sb.append(value);
-						sb.append(' ');
+						sb.append(',');
 					}
-					sb.append("* ");
-					Log.writeln("[perf-mon-watch-dog] writing HPC values");
+					sb.append("\n");
+					//Log.writeln("[perf-mon-watch-dog] writing HPC values");
+					
+					// send to remote monitor
 					writer.write(sb.toString());
 					writer.flush();
-					
 					sb.delete(0,sb.length());
+					
+					// read response
+					int newMatrix = Integer.parseInt(reader.readLine());
+					
+					if (newMatrix != previousMatrix) {
+						countDiffDecisions++;
+						if (countDiffDecisions == threshold) {
+							countDiffDecisions=0;
+							// change matrix
+							Log.writeln("[perf-mon-watch-dog] Changing MATRIX to " + newMatrix);
+							HeapGrowthManager.setGenerationGrowthRate(newMatrix);
+							Runtime.getRuntime().gc(); // ??
+							previousMatrix=newMatrix;
+						}
+					}
 					
 					Thread.sleep(interval);
 				} catch (InterruptedException e) {
@@ -141,17 +180,6 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 			Log.writeln("[perf-mon-watch-dog] exception... exiting.");
 			System.exit(-1);
 		}
-//		/* print header with names of counters */ 
-//		for (int i=0; i<counters.length; ++i) {
-//			Log.write(perfEventNames[i] + "\t");
-//		}
-//		Log.writeln();
-//		/* print rate of counters */ 
-//		for (int i=0; i<counters.length; ++i) {
-//			Log.write(counters[i] + "\t");
-//		}
-//		Log.writeln();		
-//		Log.writeln("[perf-mon-watch-dog] end");
 	}
 
 	protected long getCurrentValue(int index) {

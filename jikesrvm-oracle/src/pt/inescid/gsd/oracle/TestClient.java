@@ -684,7 +684,7 @@ public class TestClient {
 
 
 
-            Socket socket = new Socket("localhost", 9898);
+            Socket socket = new Socket("localhost", Integer.parseInt(args[0]));
 
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));

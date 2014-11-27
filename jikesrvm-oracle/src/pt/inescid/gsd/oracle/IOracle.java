@@ -1,6 +1,8 @@
 package pt.inescid.gsd.oracle;
 
+import java.io.BufferedWriter;
+
 public interface IOracle {
 	void init() throws Exception;
-	String predict(double[] pcs) throws Exception;
+	OracleResult predict(double[] pcs, BufferedWriter fileWriter) throws Exception;
 }
