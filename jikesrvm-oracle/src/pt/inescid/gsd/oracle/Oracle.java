@@ -10,10 +10,13 @@ import weka.classifiers.functions.supportVector.PolyKernel;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.converters.ConverterUtils.DataSource;
+import weka.filters.Filter;
+import weka.filters.supervised.attribute.Discretize;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.Properties;
 
 public class Oracle extends Thread implements IOracle {
@@ -80,7 +83,12 @@ public class Oracle extends Thread implements IOracle {
         // init Attribute to be feed with values
         instance = new Instance(ATTRIBUTES.length);
         instance.setDataset(trainingInstances);
-        
+
+        // discretize
+        Discretize filter = new Discretize();
+        filter.setInputFormat(trainingInstances);
+        trainingInstances = Filter.useFilter(trainingInstances, filter);
+
         // TODO implement factory class to choose classifier at runtime
         SMO baseClassifier = new SMO();
         // baseClassifier.setC(Math.pow(2, 15)); // consider the adjustment of
@@ -100,6 +108,15 @@ public class Oracle extends Thread implements IOracle {
         for (int i = 0; i < pcs.length; i++) {
             instance.setValue(i, pcs[i]);
         }
+
+        // discretize
+        Discretize filter = new Discretize();
+        Instances instances = new Instances(trainingInstances, 1);
+        instances.add(instance);
+        filter.setInputFormat(instances);
+        instances = Filter.useFilter(instances, filter);
+        instance = instances.firstInstance();
+
         double classIndex = classifier.classifyInstance(instance);
 
         String classStr = instance.classAttribute().value((int) classIndex);
