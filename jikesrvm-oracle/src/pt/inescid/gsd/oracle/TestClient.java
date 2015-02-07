@@ -15,6 +15,7 @@ public class TestClient {
         try {
             List<String> input = new ArrayList<String>();
             // xalan - M3
+            input.add("xalan");
             input.add("727779,0,0,3483822,0,3529,45198,0,361,0,3022773,3");
             input.add("42483228,740058,216898024,315551166,214084282,51896,1075260,0,6313,972064,214144360,18");
             input.add("87063064,4242894,416995586,372205437,781689174,296169,1970003,0,6955,2058216,525447334,15");
@@ -690,8 +691,10 @@ public class TestClient {
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             int count = 100;
             for(String str : input) {
+            	System.out.println("Sending: " + str);
                 out.println(str);
-                System.out.println(in.readLine());
+                if (count!=100)
+                	System.out.println(in.readLine());
                 if(--count == 0)
                     break;
             }
