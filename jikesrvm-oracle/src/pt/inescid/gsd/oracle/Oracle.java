@@ -6,7 +6,9 @@ import pt.inescid.gsd.oracle.aggregators.Aggregator;
 import pt.inescid.gsd.oracle.aggregators.MeanDiffAggregator;
 import weka.classifiers.Classifier;
 import weka.classifiers.functions.SMO;
+import weka.classifiers.functions.supportVector.NormalizedPolyKernel;
 import weka.classifiers.functions.supportVector.PolyKernel;
+import weka.core.Attribute;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.converters.ConverterUtils.DataSource;
@@ -16,6 +18,7 @@ import weka.filters.supervised.attribute.Discretize;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
 
@@ -29,23 +32,22 @@ public class Oracle extends Thread implements IOracle {
 
     private final static String PROPERTIES_FILE = "jikesrvm-oracle.properties";
 
-    private final static String TRAINING_SET_PROP = "trainingSet";
-
-    private static final String TRAINING_SET_FILENAME = "training-set.arff";
+    private final static String PROP_TRAINING_SET = "trainingSet";
+    private static final String PROP_TRAINING_SET_DEFAULT = "training-set.arff";
+    private final static String PROP_DISCRETIZE = "discretize";
+    private final static String PROP_DISCRETIZE_DEFAULT = "false";
+    private static final String PROP_PORT = "port";
+    private static final String PROP_PORT_DEFAULT = "9898";
 
     private static final int attributesSize = ATTRIBUTES.length - 1;
-
-	private static final String PORT = "port";
-
-	private static final String DEFAULT_PORT = "9898";
-
 
     private static Logger log = Logger.getLogger(Oracle.class);
 
     private static String trainingSet;
 
     private static Properties properties;
-    
+
+    private static boolean discretize;
     
     private Classifier classifier;
 
@@ -64,7 +66,8 @@ public class Oracle extends Thread implements IOracle {
         } catch (IOException e) {
             log.warn(String.format("It was not possible to load properties file '%s'.", PROPERTIES_FILE));
         }
-        trainingSet = properties.getProperty(TRAINING_SET_PROP, TRAINING_SET_FILENAME);
+        trainingSet = properties.getProperty(PROP_TRAINING_SET, PROP_TRAINING_SET_DEFAULT);
+        discretize = Boolean.parseBoolean(properties.getProperty(PROP_DISCRETIZE, PROP_DISCRETIZE_DEFAULT));
     }
     
     public Oracle(Socket socket) {
@@ -84,10 +87,11 @@ public class Oracle extends Thread implements IOracle {
         instance = new Instance(ATTRIBUTES.length);
         instance.setDataset(trainingInstances);
 
-        // discretize
-        Discretize filter = new Discretize();
-        filter.setInputFormat(trainingInstances);
-        trainingInstances = Filter.useFilter(trainingInstances, filter);
+        if(discretize) {
+            Discretize filter = new Discretize();
+            filter.setInputFormat(trainingInstances);
+            trainingInstances = Filter.useFilter(trainingInstances, filter);
+        }
 
         // TODO implement factory class to choose classifier at runtime
         SMO baseClassifier = new SMO();
@@ -96,7 +100,7 @@ public class Oracle extends Thread implements IOracle {
         baseClassifier.setKernel(new PolyKernel());
         baseClassifier.setBuildLogisticModels(true);
 
-        classifier = (Classifier) baseClassifier;
+        classifier = baseClassifier;
         classifier.buildClassifier(trainingInstances);
     }
     
@@ -108,14 +112,16 @@ public class Oracle extends Thread implements IOracle {
         for (int i = 0; i < pcs.length; i++) {
             instance.setValue(i, pcs[i]);
         }
+        instance.setValue(pcs.length, "M0");
 
-        // discretize
-        Discretize filter = new Discretize();
-        Instances instances = new Instances(trainingInstances, 1);
-        instances.add(instance);
-        filter.setInputFormat(instances);
-        instances = Filter.useFilter(instances, filter);
-        instance = instances.firstInstance();
+        if(discretize) {
+            Discretize filter = new Discretize();
+            Instances instances = new Instances(trainingInstances, 1);
+            instances.add(instance);
+            filter.setInputFormat(instances);
+            instances = Filter.useFilter(instances, filter);
+            instance = instances.firstInstance();
+        }
 
         double classIndex = classifier.classifyInstance(instance);
 
@@ -140,8 +146,10 @@ public class Oracle extends Thread implements IOracle {
 
     private String pcsToStr(double[] pcs) {
         StringBuilder sb = new StringBuilder();
-        for(double pc : pcs)
-            sb.append("," + pc);
+        for(double pc : pcs) {
+            sb.append(",");
+            sb.append(pc);
+        }
         return "{" + sb.toString().substring(1) + "}";
     }
     
@@ -203,7 +211,7 @@ public class Oracle extends Thread implements IOracle {
     public static void main(String[] args) {
 
         try {
-            int port = Integer.parseInt(Oracle.properties.getProperty(PORT, DEFAULT_PORT));
+            int port = Integer.parseInt(Oracle.properties.getProperty(PROP_PORT, PROP_PORT_DEFAULT));
             ServerSocket listener = new ServerSocket(port);
             log.info(String.format("Server running on %s:%d", listener.getInetAddress().getCanonicalHostName(),
                     listener.getLocalPort()));
