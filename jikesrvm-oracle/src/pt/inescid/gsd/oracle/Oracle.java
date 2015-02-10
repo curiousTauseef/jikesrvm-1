@@ -59,6 +59,8 @@ public class Oracle extends Thread implements IOracle {
 
     private Aggregator aggregator = new MeanDiffAggregator(attributesSize);
 
+    Discretize filter;
+
     static {
         properties = new Properties();
         try {
@@ -88,7 +90,7 @@ public class Oracle extends Thread implements IOracle {
         instance.setDataset(trainingInstances);
 
         if(discretize) {
-            Discretize filter = new Discretize();
+            filter = new Discretize();
             filter.setInputFormat(trainingInstances);
             trainingInstances = Filter.useFilter(trainingInstances, filter);
         }
@@ -112,16 +114,13 @@ public class Oracle extends Thread implements IOracle {
         for (int i = 0; i < pcs.length; i++) {
             instance.setValue(i, pcs[i]);
         }
-        // instance.setValue(pcs.length, "M0");
 
-        // if(discretize) {
-        //    Discretize filter = new Discretize();
-        //    Instances instances = new Instances(trainingInstances, 1);
-        //    instances.add(instance);
-        //    filter.setInputFormat(instances);
-        //    instances = Filter.useFilter(instances, filter);
-        //    instance = instances.firstInstance();
-        // }
+        if(discretize) {
+            Instances instances = new Instances(trainingInstances, 1);
+            instances.add(instance);
+            instances = Filter.useFilter(instances, filter);
+            instance = instances.firstInstance();
+        }
 
         double classIndex = classifier.classifyInstance(instance);
 
@@ -185,11 +184,8 @@ public class Oracle extends Thread implements IOracle {
 	                    pcs[i] = Double.parseDouble(items[i]);
 	                }
 	                pcs = aggregator.process(pcs);
-			// temporary: to check results in the weka gui
-			if(pcs != null)
-   			  System.out.println("### " + pcsToStr(pcs));
+
 	                OracleResult result = predict(pcs, fileWriter);
-	                
 	                // write best matrix yet
 	                log.info("Sending result to JVM " + result);
 	                out.write(""+result.matrix); out.newLine(); out.flush();
