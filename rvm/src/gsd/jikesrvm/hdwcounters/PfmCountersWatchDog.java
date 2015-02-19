@@ -53,6 +53,8 @@ public class PfmCountersWatchDog  extends Thread implements ExitMonitor {
 	private static int MAXVALUES = 4096; 
 	
 	public static boolean enabled;
+	
+	public static final boolean LOG_ALL = false;
 
 	protected PfmCountersWatchDog(String name, long interval, String eventsNames, String prefix) {
 		super(name);

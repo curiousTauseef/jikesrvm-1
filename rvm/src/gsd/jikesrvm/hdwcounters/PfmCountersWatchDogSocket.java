@@ -59,27 +59,39 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 	/** max values */
 	private static int MAXVALUES = 4096;
 	
-	public static boolean enabled;
+	public static boolean enabledHPC;
+	public boolean enabledOracle;
 
-	protected PfmCountersWatchDogSocket(String name, long interval, String eventsNames, String prefix) {
+	protected PfmCountersWatchDogSocket(
+			String name, 
+			long interval, 
+			String eventsNames, 
+			String prefix,
+			boolean enabledOracle) 
+	{
 		super(name);
 
 		// set threshold
 		threshold = Integer.parseInt(System.getenv("THRESHOLD"));
 		
-		// read the server port from env variable 
-		int port = Integer.parseInt(System.getenv("MLPORT"));
-		
-		// create socket to local monitor
-		socket = new Socket();
-		try {
-			InetSocketAddress localserver = new InetSocketAddress(InetAddress.getLocalHost(), port);
-			Log.writeln("[perf-mon-watch-dog] tying to connect to " + localserver);
-			socket.connect(localserver);
-		} catch (IOException e) {
-			Log.writeln("[perf-mon-watch-dog] error connecting to server.");
-			Log.writeln("[perf-mon-watch-dog] watch dog disabled.");
-			return;
+		if (enabledOracle) {
+			try {
+				// read the server port from env variable 
+				int port = Integer.parseInt(System.getenv("MLPORT"));
+				String ipStr = System.getenv("IPADDR");
+				InetAddress ipAddress =  ipStr == null ? 
+					InetAddress.getLocalHost() :
+					InetAddress.getByName(ipStr);
+				// create socket to local monitor
+				socket = new Socket();
+				InetSocketAddress server = new InetSocketAddress(ipAddress, port);
+				Log.writeln("[perf-mon-watch-dog] trying to connect to " + server);
+				socket.connect(server);
+			} catch (IOException e) {
+				Log.writeln("[perf-mon-watch-dog] error connecting to server.");
+				Log.writeln("[perf-mon-watch-dog] watch dog disabled.");
+				return;
+			}
 		}
 		
 		//this.interval = interval<MIN_INTERVAL ? MIN_INTERVAL : interval;
@@ -93,7 +105,8 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 			sysCall.sysPerfEventCreate(i, perfEventNames[i].concat("\0").getBytes());
 		}
 		sysCall.sysPerfEventEnable();
-		enabled = true;
+		enabledHPC = true;
+		this.enabledOracle = enabledOracle; 
 		Callbacks.addExitMonitor(this);  // dosen't work
 		super.setDaemon(false);
 	}
@@ -106,12 +119,14 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 	public static void boot() {
 		Log.writeln("[perf-mon-watch-dog] booting");
 		boolean enabled = Boolean.parseBoolean(System.getenv("wdogenabled"));
+		boolean enabledOracle = Boolean.parseBoolean(System.getenv("wdogenabledOracle"));
 		if (enabled) {
 			PfmCountersWatchDogSocket ft = new PfmCountersWatchDogSocket(
 					"perf-mon-watch-dog",
 					100/*Long.parseLong(System.getenv("wdoginterval"))*/,
 					System.getenv("wdogevents"),
-					System.getenv("wdogprefix"));
+					System.getenv("wdogprefix"),
+					enabledOracle);
 			ft.start();
 		} else {
 			Log.writeln("[perf-mon-watch-dog] watch dog disabled");			
@@ -123,24 +138,33 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 	
 	@Override
 	public void run() {
-		if (!enabled)
-			return;		
+		if (!enabledHPC)
+			return;
+		
+		BufferedWriter writer = null;
+		BufferedReader reader = null; 
 		Log.writeln("[perf-mon-watch-dog] start");
 		Log.writeln("[perf-mon-watch-dog] reading at each " + interval + " milisencods");
+		if (enabledOracle)
+			Log.writeln("[perf-mon-watch-dog] communication with oracle");
+		else
+			Log.writeln("[perf-mon-watch-dog] oracle is disabled");
 		try {
 			StringBuilder sb = new StringBuilder();
-			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-			BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-			
+			if (enabledOracle) {
+				writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+				reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			}
 			// write applications name
 			String appname = System.getenv("appname");
 			Log.writeln("[perf-mon-watch-dog] app name is " + appname);
-			writer.write(appname+"\n");
+			if (enabledOracle)
+				writer.write(appname+"\n");
 			
 			int previousMatrix = 0, countDiffDecisions=0;
 			
 			//BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-			while (enabled) {
+			while (enabledHPC) {
 				try {
 					for (int i=0; i<perfEventNames.length; ++i) {
 						long value = getCurrentValue(i);
@@ -150,25 +174,29 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 					sb.append("\n");
 					//Log.writeln("[perf-mon-watch-dog] writing HPC values");
 					
-					// send to remote monitor
-					writer.write(sb.toString());
-					writer.flush();
-					sb.delete(0,sb.length());
-					
-					// read response
-					int newMatrix = Integer.parseInt(reader.readLine());
-					
-					if (newMatrix != previousMatrix) {
-						countDiffDecisions++;
-						if (countDiffDecisions == threshold) {
-							countDiffDecisions=0;
-							// change matrix
-							Log.writeln("[perf-mon-watch-dog] Changing MATRIX to " + newMatrix);
-							HeapGrowthManager.setGenerationGrowthRate(newMatrix);
-							Runtime.getRuntime().gc(); // ??
-							previousMatrix=newMatrix;
+					if (enabledOracle) {
+						// send to remote monitor
+						writer.write(sb.toString());
+						writer.flush();
+						
+						// read response
+						int newMatrix = Integer.parseInt(reader.readLine());
+						
+						/*
+						if (newMatrix != previousMatrix) {
+							countDiffDecisions++;
+							if (countDiffDecisions == threshold) {
+								countDiffDecisions=0;
+								// change matrix
+								Log.writeln("[perf-mon-watch-dog] Changing MATRIX to " + newMatrix);
+								HeapGrowthManager.setGenerationGrowthRate(newMatrix);
+								Runtime.getRuntime().gc(); // ??
+								previousMatrix=newMatrix;
+							}
 						}
+						*/
 					}
+					sb.delete(0,sb.length());
 					
 					Thread.sleep(interval);
 				} catch (InterruptedException e) {
@@ -176,6 +204,8 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 					System.exit(-1);
 				}
 			}
+			writer.write("exit");
+			socket.close();
 		} catch (IOException ex) {
 			Log.writeln("[perf-mon-watch-dog] exception... exiting.");
 			System.exit(-1);
@@ -216,7 +246,7 @@ public class PfmCountersWatchDogSocket  extends Thread implements ExitMonitor {
 	public void notifyExit(int value) {
 		// JS: hack to end watch dog
 	    Log.writeln("exiting watch dog");
-		PfmCountersWatchDogSocket.enabled = false;
+		PfmCountersWatchDogSocket.enabledHPC = false;
 		// end of hack
 	}
 
