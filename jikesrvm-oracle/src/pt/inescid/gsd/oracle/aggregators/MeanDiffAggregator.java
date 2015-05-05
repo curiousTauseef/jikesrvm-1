@@ -8,8 +8,6 @@ public class MeanDiffAggregator extends Aggregator {
 
     private int[] count;
 
-    private boolean first = true;
-
     public MeanDiffAggregator(int numberOfItems) {
         super(numberOfItems);
         previousItems = new double[numberOfItems];
@@ -18,8 +16,12 @@ public class MeanDiffAggregator extends Aggregator {
     }
 
     public double[] process(double[] items) {
-        double[] result = first ? null : new double[numberOfItems];
-
+        double[] result = null;
+        
+        if (!first) {
+        	result = new double[numberOfItems];
+        }
+        
         for (int i = 0; i < numberOfItems; i++) {
             if(!first) {
                 double diff = items[i] - previousItems[i];
@@ -29,7 +31,9 @@ public class MeanDiffAggregator extends Aggregator {
             }
             previousItems[i] = items[i];
         }
+
         first = false;
+        
         return result;
     }
 
