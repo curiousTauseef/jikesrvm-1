@@ -18,7 +18,7 @@ public class PCFileOutput implements PCOutput {
 	public void log(double[] pcs) throws IOException {
 		StringBuffer out = new StringBuffer();
 		for (int i=0; i<pcs.length; ++i) {
-			out.append(pcs[i]);
+			out.append((int)pcs[i]);
 			if (i+1<pcs.length) {
 				out.append(",");
 			}

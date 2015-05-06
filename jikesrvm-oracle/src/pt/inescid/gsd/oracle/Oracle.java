@@ -33,13 +33,14 @@ public class Oracle extends Thread {
 	private final static String PROPERTIES_FILE = "jikesrvm-oracle.properties";
     private static final String PROP_PORT = "port";
     private static final String PROP_PORT_DEFAULT = "5005";
-
+    
 	private Socket socket;
 	private GlobalClassifier classifier;
 	private PCOutput outputPC;
 	
 	public static final boolean LogALL = false;
-    public static Logger log = Logger.getLogger(Oracle.class);
+	public static String OUTPUT_BASE_DIR;
+	public static Logger log = Logger.getLogger(Oracle.class);
 
     
     public Oracle(PCOutput outputPC, GlobalClassifier classifier, Socket socket) {
@@ -57,10 +58,10 @@ public class Oracle extends Thread {
             String appName = in.readLine();
             log.info(appName);
             
-            BufferedWriter fileWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("LOG_" + appName + ".csv")));
+            BufferedWriter fileWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(OUTPUT_BASE_DIR+"LOG_" + appName + ".csv")));
             fileWriter.write("M0;M1;M2;M3\n");
             
-            outputPC.start(appName+"-AGGR-PCs.csv");
+            outputPC.start(OUTPUT_BASE_DIR+appName+"-AGGR-PCs.csv");
             classifier.getAggregator().start();
             
             try {
@@ -122,6 +123,8 @@ public class Oracle extends Thread {
         Properties properties = new Properties();
         properties.load(new FileInputStream(PROPERTIES_FILE));
     	
+        Oracle.OUTPUT_BASE_DIR = properties.getProperty("base-dir", "./pc-values/");
+        
         int port = Integer.parseInt(properties.getProperty(PROP_PORT, PROP_PORT_DEFAULT));
         ServerSocket listener = new ServerSocket(port);
         log.info(String.format("Server running on %s:%d", listener.getInetAddress().getCanonicalHostName(),
