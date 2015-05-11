@@ -36,7 +36,7 @@ public class Oracle extends Thread {
     
 	private Socket socket;
 	private GlobalClassifier classifier;
-	private PCOutput outputPC;
+	private PCOutput outputAggregatedPC;
 	
 	public static final boolean LogALL = false;
 	public static String OUTPUT_BASE_DIR;
@@ -44,7 +44,7 @@ public class Oracle extends Thread {
 
     
     public Oracle(PCOutput outputPC, GlobalClassifier classifier, Socket socket) {
-    	this.outputPC = outputPC;
+    	this.outputAggregatedPC = outputPC;
         this.classifier = classifier;
     	this.socket = socket;
     }
@@ -61,7 +61,7 @@ public class Oracle extends Thread {
             BufferedWriter fileWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(OUTPUT_BASE_DIR+"LOG_" + appName + ".csv")));
             fileWriter.write("M0;M1;M2;M3\n");
             
-            outputPC.start(OUTPUT_BASE_DIR+appName+"-AGGR-PCs.csv");
+            outputAggregatedPC.start(OUTPUT_BASE_DIR+appName+"-AGGR-PCs.csv");
             classifier.getAggregator().start();
             
             try {
@@ -87,11 +87,11 @@ public class Oracle extends Thread {
 			        for(int i = 0; i < items.length; i++) {
 	                    pcs[i] = Double.parseDouble(items[i]);
 	                }
-			        
+			                        	
 	                pcs = classifier.getAggregator().process(pcs);
 
 	                if (pcs!=null) {
-	                	outputPC.log(pcs);
+	                	outputAggregatedPC.log(pcs);
 	                }
 	                
 	                OracleResult result = classifier.predict(pcs, fileWriter);
@@ -109,7 +109,7 @@ public class Oracle extends Thread {
         	e.printStackTrace();            
         } finally {
             try {
-            	outputPC.stop();
+            	outputAggregatedPC.stop();
                 socket.close();
                 log.debug("connection to JVM:" + socket.getPort() + " lost");
             } catch (IOException e) {
@@ -130,21 +130,23 @@ public class Oracle extends Thread {
         log.info(String.format("Server running on %s:%d", listener.getInetAddress().getCanonicalHostName(),
                 listener.getLocalPort()));
         
-        GlobalClassifier classifier = new GlobalClassifier(properties);
-        classifier.init();
+
         
-        PCOutput output;
-        boolean outputPC = Boolean.parseBoolean(properties.getProperty("outputPCs", "false"));
-		if (outputPC) {
+        PCOutput outputAggr, outputRaw;
+        boolean outputAggrPC = Boolean.parseBoolean(properties.getProperty("outputPCs", "false"));
+        if (outputAggrPC) {
 			log.info("Dumping PC to file");
-        	output = new PCFileOutput();       	
+        	outputAggr = new PCFileOutput();
         } else {
         	log.info("Not dumping PCs");
-        	output = new PCVoidOupput();
+        	outputAggr = new PCVoidOupput();
         }
 
 		while(true) {
-            new Oracle(output, classifier, listener.accept()).start(); 
+	        GlobalClassifier classifier = new GlobalClassifier(properties);
+	        classifier.init();
+            Oracle oracle = new Oracle(outputAggr, classifier, listener.accept());
+            oracle.start(); 
         }
     }
 
