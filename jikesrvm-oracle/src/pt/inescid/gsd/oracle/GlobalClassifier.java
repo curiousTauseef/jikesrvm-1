@@ -51,7 +51,7 @@ public class GlobalClassifier implements IOracle {
 	
 	private Socket socket;
 	
-	private Aggregator aggregator = new MeanDiffAggregator(attributesSize);
+	private Aggregator aggregator;
 	
 	Discretize filter;    
     
@@ -67,6 +67,7 @@ public class GlobalClassifier implements IOracle {
     public GlobalClassifier(Properties properties) {
     	trainingSet = properties.getProperty(PROP_TRAINING_SET, PROP_TRAINING_SET_DEFAULT);
     	discretize = Boolean.parseBoolean(properties.getProperty(PROP_DISCRETIZE, PROP_DISCRETIZE_DEFAULT));
+    	aggregator = new MeanDiffAggregator(attributesSize);
     }
     
     public Aggregator getAggregator() {
