@@ -152,9 +152,10 @@ public class Oracle extends Thread {
 		}
 
 		while (true) {
+			Socket socket = listener.accept();
 			GlobalClassifier classifier = new GlobalClassifier(properties);
 			classifier.init();
-			Oracle oracle = new Oracle(outputAggr, classifier, listener.accept());
+			Oracle oracle = new Oracle(outputAggr, classifier, socket);
 			oracle.start();
 		}
 	}
