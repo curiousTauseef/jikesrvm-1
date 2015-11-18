@@ -21,7 +21,7 @@ public class GeometricMeanGrowthRateAggregator extends Aggregator {
 
         for (int i = 0; i < numberOfItems; i++) {
             if(!first) {
-                double growthRate = items[i] / previousItems[i] - 1;
+                double growthRate = items[i] / previousItems[i];
                 product[i] *= growthRate;
                 count[i]++;
                 result[i] = Math.pow(product[i], 1.0 / (double) count[i]);
